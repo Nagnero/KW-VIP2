@@ -159,23 +159,52 @@ y = merged_features['Target']
 model = RandomForestClassifier()
 model.fit(X, y)
 
-# SHAP 값 계산
-explainer = shap.Explainer(model, X)
-shap_values = explainer(X, check_additivity=False)
+# # SHAP 값 계산
+# explainer = shap.Explainer(model, X)
+# shap_values = explainer(X, check_additivity=False)
+#
+# print(shap_values.values.shape)
+#
+# # SHAP 각 피처의 평균 절대 SHAP 값 계산 후 상위 30개 피처 선택
+# mean_shap_values = shap_values.values.mean(axis=0)
+# shap_values_label_1 = mean_shap_values[:, 1]
+# mean_abs_shap_values = np.abs(shap_values_label_1)
+#
+# top_30_indices = np.argsort(mean_abs_shap_values)[-30:]
+# top_30_features = X.columns[top_30_indices]
+#
+# shap_values_array = shap_values.values
+# shap_values_top_30 = shap_values_array[:, top_30_indices, :]
+#
+# # SHAP 결과 시각화
+# # shap.summary_plot(shap_values_top_30, X[top_30_features], plot_type="dot", max_display=30)
+# shap.summary_plot(shap_values_top_30[:, :, 1], X[top_30_features], plot_type="dot", max_display=30)
 
-print(shap_values.values.shape)
 
-# SHAP 각 피처의 평균 절대 SHAP 값 계산 후 상위 30개 피처 선택
-mean_shap_values = shap_values.values.mean(axis=0)
-shap_values_label_1 = mean_shap_values[:, 1]
-mean_abs_shap_values = np.abs(shap_values_label_1)
+# LIME Explainer 초기화
+lime_explainer = LimeTabularExplainer(
+    X.values,  # 학습 데이터
+    feature_names=X.columns.tolist(),  # 피처 이름
+    class_names=["Decrease", "Increase"],  # 클래스 이름
+    discretize_continuous=False  # 연속형 변수 이산화
+)
 
-top_30_indices = np.argsort(mean_abs_shap_values)[-30:]
-top_30_features = X.columns[top_30_indices]
+# 특정 샘플에 대한 LIME 설명 생성 (예: 첫 번째 샘플)
+sample_idx = 0
+lime_exp = lime_explainer.explain_instance(
+    X.values[sample_idx],
+    model.predict_proba,
+    num_features=30
+)
 
-shap_values_array = shap_values.values
-shap_values_top_30 = shap_values_array[:, top_30_indices, :]
+# LIME 결과 출력
+print(f"LIME Explanation for Sample {sample_idx}")
+for feature, weight in lime_exp.as_list():
+    print(f"{feature}: {weight}")
 
-# SHAP 결과 시각화
-# shap.summary_plot(shap_values_top_30, X[top_30_features], plot_type="dot", max_display=30)
-shap.summary_plot(shap_values_top_30[:, :, 1], X[top_30_features], plot_type="dot", max_display=30)
+# 결과 저장
+lime_exp.save_to_file("lime_explanation_sample_0.html")  # HTML 파일 저장
+fig = lime_exp.as_pyplot_figure()  # matplotlib 시각화 생성
+fig.savefig("lime_explanation_sample_0.png")  # PNG 파일로 저장
+plt.close(fig)
+
