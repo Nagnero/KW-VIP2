@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 from stockstats import StockDataFrame as Sdf
-from fredapi import Fred
 from sklearn.ensemble import RandomForestClassifier
 import shap
 from lime.lime_tabular import LimeTabularExplainer
@@ -102,26 +101,6 @@ def get_technical_indicators(stock_data):
     return return_data_features
 
 
-# FRED API 키 설정
-fred = Fred(api_key='f6f2039c0039dce4c3874baba4bd06cb')
-
-# FRED 지표 ID 목록
-fred_ID = ["RECPROUSM156N", "CORESTICKM159SFRBATL", "PCETRIM12M159SFRBDAL", "CPALTT01USM657N", "PSAVERT", "AISRSA",
-           "ANFCI", "UNEMPLOY"]
-
-# FRED 데이터 가져오기
-fred_data = {}
-for ID in fred_ID:
-    df = fred.get_series(ID, '2002-01-02')
-    fred_data[ID] = df
-
-fred_data = pd.DataFrame(fred_data)
-
-# 날짜 인덱스를 사용하여 결측값 보간
-fred_data.index = pd.to_datetime(fred_data.index)
-fred_data = fred_data.resample('D').mean().ffill()
-
-
 
 # 종목 지정 티커
 # ticker = '005930.KS'    # 삼성전자
@@ -135,21 +114,13 @@ data_features = get_technical_indicators(data)
 # 인덱스를 리셋하여 날짜를 포함한 데이터프레임 생성
 data_features = data_features.reset_index()
 
-# FRED 데이터와 결합하기 위해 날짜 인덱스 설정
-fred_data = fred_data.reset_index()
-fred_data.columns = ['Date'] + fred_ID
-
-# 주식 데이터와 FRED 데이터를 날짜 기준으로 결합
-data_features['Date'] = pd.to_datetime(data_features['Date'])
-merged_features = pd.merge(data_features, fred_data, on='Date', how='left')
-
 # 결측값 처리: 이전 값으로 채우고 0으로 채우기
-merged_features = merged_features.ffill()
-merged_features = merged_features.fillna(0)
+data_features = data_features.ffill()
+data_features = data_features.fillna(0)
 
 # 5일 후 평균 종가를 기준으로 레이블 생성 후 결측값 처리
-merged_features['Target'] = np.where(merged_features['Close'].shift(-5).rolling(5).mean() > merged_features['Close'], 1, 0)
-merged_features = merged_features.ffill().fillna(0)
+data_features['Target'] = np.where(data_features['Close'].shift(-5).rolling(5).mean() > data_features['Close'], 1, 0)
+merged_features = data_features.ffill().fillna(0)
 
 # Features와 Target 분리
 X = merged_features.drop(columns=['Date', 'Target', 'Close'])  # 'Close'는 예측에 사용되므로 제외
@@ -159,52 +130,53 @@ y = merged_features['Target']
 model = RandomForestClassifier()
 model.fit(X, y)
 
-# # SHAP 값 계산
-# explainer = shap.Explainer(model, X)
-# shap_values = explainer(X, check_additivity=False)
-#
-# print(shap_values.values.shape)
-#
-# # SHAP 각 피처의 평균 절대 SHAP 값 계산 후 상위 30개 피처 선택
-# mean_shap_values = shap_values.values.mean(axis=0)
-# shap_values_label_1 = mean_shap_values[:, 1]
-# mean_abs_shap_values = np.abs(shap_values_label_1)
-#
-# top_30_indices = np.argsort(mean_abs_shap_values)[-30:]
-# top_30_features = X.columns[top_30_indices]
-#
-# shap_values_array = shap_values.values
-# shap_values_top_30 = shap_values_array[:, top_30_indices, :]
-#
-# # SHAP 결과 시각화
-# # shap.summary_plot(shap_values_top_30, X[top_30_features], plot_type="dot", max_display=30)
-# shap.summary_plot(shap_values_top_30[:, :, 1], X[top_30_features], plot_type="dot", max_display=30)
+# SHAP 값 계산
+explainer = shap.Explainer(model, X)
+shap_values = explainer(X, check_additivity=False)
+
+print(shap_values.values.shape)
+
+# SHAP 각 피처의 평균 절대 SHAP 값 계산 후 상위 30개 피처 선택
+mean_shap_values = shap_values.values.mean(axis=0)
+shap_values_label_1 = mean_shap_values[:, 1]
+mean_abs_shap_values = np.abs(shap_values_label_1)
+
+top_30_indices = np.argsort(mean_abs_shap_values)[-30:]
+top_30_features = X.columns[top_30_indices]
+
+shap_values_array = shap_values.values
+shap_values_top_30 = shap_values_array[:, top_30_indices, :]
+
+# SHAP 결과 시각화
+# shap.summary_plot(shap_values_top_30, X[top_30_features], plot_type="dot", max_display=30)
+shap.summary_plot(shap_values_top_30[:, :, 1], X[top_30_features], plot_type="dot", max_display=30)
 
 
-# LIME Explainer 초기화
-lime_explainer = LimeTabularExplainer(
-    X.values,  # 학습 데이터
-    feature_names=X.columns.tolist(),  # 피처 이름
-    class_names=["Decrease", "Increase"],  # 클래스 이름
-    discretize_continuous=False  # 연속형 변수 이산화
-)
 
-# 특정 샘플에 대한 LIME 설명 생성 (예: 첫 번째 샘플)
-sample_idx = 0
-lime_exp = lime_explainer.explain_instance(
-    X.values[sample_idx],
-    model.predict_proba,
-    num_features=30
-)
-
-# LIME 결과 출력
-print(f"LIME Explanation for Sample {sample_idx}")
-for feature, weight in lime_exp.as_list():
-    print(f"{feature}: {weight}")
-
-# 결과 저장
-lime_exp.save_to_file("lime_explanation_sample_0.html")  # HTML 파일 저장
-fig = lime_exp.as_pyplot_figure()  # matplotlib 시각화 생성
-fig.savefig("lime_explanation_sample_0.png")  # PNG 파일로 저장
-plt.close(fig)
+# # LIME Explainer 초기화
+# lime_explainer = LimeTabularExplainer(
+#     X.values,  # 학습 데이터
+#     feature_names=X.columns.tolist(),  # 피처 이름
+#     class_names=["Decrease", "Increase"],  # 클래스 이름
+#     discretize_continuous=False  # 연속형 변수 이산화
+# )
+#
+# # 특정 샘플에 대한 LIME 설명 생성 (예: 첫 번째 샘플)
+# sample_idx = 0
+# lime_exp = lime_explainer.explain_instance(
+#     X.values[sample_idx],
+#     model.predict_proba,
+#     num_features=30
+# )
+#
+# # LIME 결과 출력
+# print(f"LIME Explanation for Sample {sample_idx}")
+# for feature, weight in lime_exp.as_list():
+#     print(f"{feature}: {weight}")
+#
+# # 결과 저장
+# lime_exp.save_to_file("lime_explanation_sample_0.html")  # HTML 파일 저장
+# fig = lime_exp.as_pyplot_figure()  # matplotlib 시각화 생성
+# fig.savefig("lime_explanation_sample_0.png")  # PNG 파일로 저장
+# plt.close(fig)
 
