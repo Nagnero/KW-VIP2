@@ -5,11 +5,14 @@ from stockstats import StockDataFrame as Sdf
 from fredapi import Fred
 from sklearn.ensemble import RandomForestClassifier
 import shap
+from lime.lime_tabular import LimeTabularExplainer
+import matplotlib.pyplot as plt
 
 
 def get_technical_indicators(stock_data):
     # 필요한 feature들 추출
     return_data_features = stock_data[['Open', 'High', 'Low', 'Close', 'Volume']]
+    return_data_features.to_csv("엔씨소프트.csv")
 
     # StockDataFrame 변환
     stock_data_frame = Sdf.retype(return_data_features.copy())
@@ -100,7 +103,7 @@ def get_technical_indicators(stock_data):
 
 
 # FRED API 키 설정
-fred = Fred(api_key='c7fc62c3e1c6d4001bc7c05a44920857')
+fred = Fred(api_key='f6f2039c0039dce4c3874baba4bd06cb')
 
 # FRED 지표 ID 목록
 fred_ID = ["RECPROUSM156N", "CORESTICKM159SFRBATL", "PCETRIM12M159SFRBDAL", "CPALTT01USM657N", "PSAVERT", "AISRSA",
@@ -126,7 +129,7 @@ ticker = '036570.KQ'    # 엔씨소프트
 # ticker = '105560.KQ'    # KB금융
 
 # 시계열 데이터 다운로드 후 기술적 지표 추가
-data = yf.download(ticker, start='2002-02-01')
+data = yf.download(ticker, start='2002-01-02')
 data_features = get_technical_indicators(data)
 
 # 인덱스를 리셋하여 날짜를 포함한 데이터프레임 생성

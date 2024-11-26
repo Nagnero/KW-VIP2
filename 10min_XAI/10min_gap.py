@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -48,9 +49,9 @@ predict = model.predict(x_test)
 
 confusion = confusion_matrix(y_test, predict)
 accuracy = accuracy_score(y_test, predict)
-precision = precision_score(y_test, predict,average='macro')
-recall = recall_score(y_test, predict,average='macro')
-f1 = f1_score(y_test, predict,average='macro')
+precision = precision_score(y_test, predict, average='macro')
+recall = recall_score(y_test, predict, average='macro')
+f1 = f1_score(y_test, predict, average='macro')
 print(confusion)
 print('정확도 {0:.4f}, 정밀도: {1:.4f}, 재현율: {2:.4f}'.format(accuracy, precision, recall))
 
@@ -58,10 +59,6 @@ print('정확도 {0:.4f}, 정밀도: {1:.4f}, 재현율: {2:.4f}'.format(accurac
 shap.initjs()
 tree_explainer = shap.TreeExplainer(model)
 tree_shap_values = tree_explainer.shap_values(x_train)
-sv = np.array(tree_shap_values)
-# y = model.predict(x_train).astype("bool")
-# sv_survive = sv[:, y, :]
-# sv_die = sv[:, ~y, :]
 feature_name = stock_df.columns[:-1]
 shap.summary_plot(tree_shap_values[1], x_train.astype("float"), feature_names=feature_name)
 
